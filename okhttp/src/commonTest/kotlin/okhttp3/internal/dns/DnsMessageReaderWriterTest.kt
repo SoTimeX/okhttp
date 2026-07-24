@@ -13,12 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package okhttp3.dnsoverhttps.internal
+@file:OptIn(OkHttpInternalApi::class)
+
+package okhttp3.internal.dns
 
 import assertk.assertThat
+import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import java.net.InetAddress
+import java.net.ProtocolException
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
+import okhttp3.internal.OkHttpInternalApi
 import okio.Buffer
 import okio.ByteString.Companion.decodeHex
 
@@ -117,10 +123,10 @@ class DnsMessageReaderWriterTest {
                   InetAddress.getByName("2607:f8b0:4023:1807:0:0:0:8b"),
                 ),
               echConfigList =
-                (
-                  "003dfe0d0039aa00200020a4a7bb34b77c43336c3a2931dd28c87d008218a99b44f1f" +
-                    "0aa8a82537d487d43000400010001000a676f6f676c652e636f6d0000"
-                ).decodeHex(),
+                """
+                003dfe0d0039aa00200020a4a7bb34b77c43336c3a2931dd28c87d008218a99b44f1f0aa8a82537d487d
+                43000400010001000a676f6f676c652e636f6d0000
+                """.decodeHex(ignoreWhitespace = true),
             ),
             ResourceRecord.Https(
               name = "lysine.dev",
@@ -132,6 +138,23 @@ class DnsMessageReaderWriterTest {
           ),
       ),
     )
+  }
+
+  @Test
+  fun `unbounded name compression`() {
+    val buffer = Buffer()
+    buffer.write(
+      """
+      000081800001000100000000066c7973696e65c00c000100010363646ec00c000100010000000000040a141e28
+      """.decodeHex(ignoreWhitespace = true),
+    )
+
+    val reader = DnsMessageReader(buffer)
+    val e =
+      assertFailsWith<ProtocolException> {
+        reader.read()
+      }
+    assertThat(e).hasMessage("malformed DNS message")
   }
 
   private fun assertRoundTrip(message: DnsMessage) {
